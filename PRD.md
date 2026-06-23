@@ -236,7 +236,67 @@ public:
 ./vectorkv delete doc1
 ```
 
-## 8. System Architecture
+## 8. Technology Stack and Dependency Strategy
+
+VectorKV should be developed as a C++ systems project rather than as a framework-first application. The core database mechanisms should be implemented directly, while mature libraries should be used for build, testing, benchmarking, command-line parsing, logging, and optional service exposure.
+
+### 8.1 Required Core Technology
+
+- **Language:** C++20
+- **Build System:** CMake
+- **Core Runtime:** Standard C++ library
+- **Concurrency:** `std::thread`, `std::shared_mutex`, `std::unique_lock`, `std::shared_lock`
+- **Storage I/O:** Standard file streams or low-level file APIs where needed
+
+### 8.2 Recommended Supporting Libraries
+
+| Area | Recommended Choice | Purpose | Required for MVP |
+| --- | --- | --- | --- |
+| Build system | CMake | Project configuration, targets, include paths, build types | Yes |
+| Unit testing | GoogleTest | Unit tests for `VectorStore`, `HNSWIndex`, `WAL`, recovery, and distance functions | Yes |
+| Benchmarking | Google Benchmark or simple custom benchmark runner | Measure QPS, latency, index build time, and Recall@K | Yes |
+| CLI parsing | CLI11 or simple hand-written parser | Support demo commands and benchmark arguments | Optional for MVP |
+| RPC framework | gRPC with Protobuf | Expose VectorKV as a remote service in a later phase | No, later extension |
+| Logging | spdlog or fmt plus standard output/error | Structured logs for insert, search, recovery, and benchmark runs | Optional but recommended |
+
+### 8.3 What Should Be Implemented In-House
+
+The following parts are the core learning and resume value of the project and should be implemented directly:
+
+- Vector record storage.
+- Cosine similarity and optional L2 distance.
+- Top-k search using a priority queue.
+- Brute-force exact search baseline.
+- HNSW or HNSW-like approximate nearest neighbor index.
+- WAL append and replay logic.
+- Snapshot save and load logic.
+- Read/write concurrency control around database state.
+- Recall@K calculation.
+- Latency percentile reporting if not using a benchmark library for this directly.
+
+### 8.4 What Should Not Be Reimplemented Initially
+
+The following parts are not central to the project and should use existing tools or libraries:
+
+- Build orchestration: use CMake instead of hand-written compiler scripts.
+- Unit test framework: use GoogleTest instead of writing a custom test framework.
+- Microbenchmark harness: use Google Benchmark or a small custom runner, but avoid building a complex benchmark framework.
+- CLI argument parsing: use CLI11 or a minimal hand-written parser.
+- RPC transport: use gRPC later instead of implementing a custom network protocol in the first version.
+- Logging formatting: use spdlog or fmt when structured logging becomes useful.
+
+### 8.5 Dependency Philosophy
+
+Dependencies should support engineering quality without hiding the important system internals. A good rule:
+
+```text
+Use libraries for project infrastructure.
+Implement the database, indexing, persistence, and concurrency mechanisms yourself.
+```
+
+This keeps the project focused on the skills it is meant to demonstrate: C++ systems programming, algorithm implementation, persistence, performance analysis, and AI infrastructure fundamentals.
+
+## 9. System Architecture
 
 ```text
 Client / CLI / Benchmark
@@ -261,9 +321,9 @@ Metrics / Benchmark
 QPS, latency, recall
 ```
 
-## 9. Module Breakdown
+## 10. Module Breakdown
 
-### 9.1 VectorStore
+### 10.1 VectorStore
 
 Responsibilities:
 
@@ -278,7 +338,7 @@ Possible data structure:
 std::unordered_map<std::string, VectorRecord> records;
 ```
 
-### 9.2 BruteForceIndex
+### 10.2 BruteForceIndex
 
 Responsibilities:
 
@@ -295,7 +355,7 @@ For each non-deleted vector:
 return candidates sorted by score
 ```
 
-### 9.3 HNSWIndex
+### 10.3 HNSWIndex
 
 Responsibilities:
 
@@ -316,7 +376,7 @@ Future implementation may add:
 - Random level assignment.
 - Layer-by-layer greedy descent.
 
-### 9.4 WAL
+### 10.4 WAL
 
 Responsibilities:
 
@@ -333,7 +393,7 @@ DELETE doc1
 
 The first implementation can use a text format for readability. A later version may use binary encoding.
 
-### 9.5 Snapshot
+### 10.5 Snapshot
 
 Responsibilities:
 
@@ -346,7 +406,7 @@ The HNSW index may either be:
 - Rebuilt from vector records after loading the snapshot.
 - Persisted directly in a later version.
 
-### 9.6 Metrics and Benchmark
+### 10.6 Metrics and Benchmark
 
 Responsibilities:
 
@@ -356,7 +416,7 @@ Responsibilities:
 - Measure index build time.
 - Optionally measure memory usage.
 
-## 10. Concurrency Model
+## 11. Concurrency Model
 
 Vector database workloads are usually read-heavy. The first concurrent version should optimize for concurrent search.
 
@@ -394,7 +454,7 @@ Initial concurrency target:
 - Keep insert and delete single-writer.
 - Avoid concurrent HNSW mutation complexity in the first version.
 
-## 11. Similarity Metrics
+## 12. Similarity Metrics
 
 The first version should support cosine similarity.
 
@@ -409,9 +469,9 @@ Optional later metrics:
 - L2 distance
 - Inner product
 
-## 12. Benchmark Design
+## 13. Benchmark Design
 
-### 12.1 Performance Benchmark
+### 13.1 Performance Benchmark
 
 Variables:
 
@@ -430,7 +490,7 @@ Metrics:
 - Index build time
 - Memory usage if feasible
 
-### 12.2 Recall Benchmark
+### 13.2 Recall Benchmark
 
 Use brute-force exact search as ground truth.
 
@@ -448,7 +508,7 @@ BruteForce  120 ms          1.00
 HNSW        6 ms            0.92
 ```
 
-## 13. Project Structure
+## 14. Project Structure
 
 ```text
 VectorKV/
@@ -494,13 +554,15 @@ VectorKV/
     sample_vectors.txt
 ```
 
-## 14. Milestones
+## 15. Milestones
 
 ### Week 1: Project Setup and Brute-Force Search
 
 Deliverables:
 
 - CMake project setup.
+- Initial `vectorkv_core` library target.
+- GoogleTest setup for unit tests.
 - `VectorStore`.
 - `insert`, `delete`, and brute-force `search`.
 - Cosine similarity.
@@ -511,8 +573,9 @@ Deliverables:
 Deliverables:
 
 - Priority queue based top-k search.
-- Brute-force benchmark.
+- Brute-force benchmark using Google Benchmark or a simple custom runner.
 - Latency and QPS measurement.
+- CLI argument parsing for benchmark parameters using CLI11 or a minimal hand-written parser.
 - Basic README with usage examples.
 
 ### Week 3: WAL and Snapshot Persistence
@@ -555,7 +618,7 @@ Deliverables:
 
 - Error handling.
 - More complete tests.
-- Structured logging if needed.
+- Structured logging using spdlog or fmt if needed.
 - Cleaner README.
 - Architecture diagram.
 
@@ -563,13 +626,13 @@ Deliverables:
 
 Deliverables:
 
-- Optional HTTP or gRPC API.
+- Optional gRPC API using Protobuf.
 - Optional Docker demo.
 - Final benchmark table.
 - Resume bullet points.
 - Project screenshots or terminal demos.
 
-## 15. Acceptance Criteria
+## 16. Acceptance Criteria
 
 The project is considered resume-ready when it satisfies:
 
@@ -582,6 +645,9 @@ The project is considered resume-ready when it satisfies:
 - Supports concurrent search.
 - Reports QPS and P50/P95/P99 latency.
 - Contains unit tests for key modules.
+- Uses CMake to build library, example, test, and benchmark targets.
+- Uses GoogleTest or an equivalent standard testing setup.
+- Uses Google Benchmark or a clearly documented custom benchmark runner.
 - Contains a clear README with architecture and benchmark results.
 
 Ideal target:
@@ -596,7 +662,7 @@ Concurrent search: supports 8 query threads
 Recovery: data survives restart
 ```
 
-## 16. Risks and Mitigations
+## 17. Risks and Mitigations
 
 ### Risk: HNSW is difficult to implement correctly
 
@@ -630,7 +696,7 @@ Mitigation:
 - Tune `M` and `ef_search`.
 - Use realistic vector dimensions such as 128, 384, or 768.
 
-## 17. Future Extensions
+## 18. Future Extensions
 
 Potential future features:
 
@@ -646,7 +712,7 @@ Potential future features:
 - Replication between nodes.
 - Distributed sharding.
 
-## 18. Final Project Narrative
+## 19. Final Project Narrative
 
 VectorKV should be presented as a modern AI infrastructure project:
 
