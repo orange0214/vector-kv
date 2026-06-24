@@ -24,6 +24,7 @@ include(GoogleTest)
 add_executable(vectorkv_tests
     smoke_test.cpp
     distance_test.cpp
+    vector_store_test.cpp
 )
 
 target_link_libraries(vectorkv_tests

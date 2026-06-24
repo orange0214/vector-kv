@@ -42,6 +42,7 @@ option(VECTORKV_BUILD_EXAMPLES "Build example executables" ON)
 add_library(vectorkv_core
     src/version.cpp
     src/distance.cpp
+    src/vector_store.cpp
 )
 
 target_include_directories(vectorkv_core
