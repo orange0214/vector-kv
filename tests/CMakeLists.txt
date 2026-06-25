@@ -26,6 +26,7 @@ add_executable(vectorkv_tests
     distance_test.cpp
     vector_store_test.cpp
     brute_force_test.cpp
+    vector_db_test.cpp
 )
 
 target_link_libraries(vectorkv_tests

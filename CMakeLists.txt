@@ -44,6 +44,7 @@ add_library(vectorkv_core
     src/distance.cpp
     src/vector_store.cpp
     src/brute_force_index.cpp
+    src/vector_db.cpp
 )
 
 target_include_directories(vectorkv_core
