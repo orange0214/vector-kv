@@ -21,11 +21,11 @@ FetchContent_MakeAvailable(benchmark)
 # Add new *_bench.cpp files / targets as benchmarks are implemented.
 # ---------------------------------------------------------------------------
 add_executable(vectorkv_bench
-    smoke_bench.cpp
+    vector_bench.cpp
+
 )
 
 target_link_libraries(vectorkv_bench
     PRIVATE
         VectorKV::core
-        benchmark::benchmark
 )
