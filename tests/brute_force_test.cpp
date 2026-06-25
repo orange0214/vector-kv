@@ -6,7 +6,6 @@
 #include "vectorkv/types.h"
 
 using vectorkv::BruteForceIndex;
-using vectorkv::SearchResult;
 using vectorkv::VectorRecord;
 using vectorkv::VectorStore;
 

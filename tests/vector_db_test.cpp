@@ -2,7 +2,6 @@
 
 #include "vectorkv/vector_db.h"
 
-using vectorkv::SearchResult;
 using vectorkv::VectorDB;
 
 TEST(VectorDB, InsertThenSearchFindsMostSimilarFirst) {

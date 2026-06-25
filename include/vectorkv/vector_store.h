@@ -1,6 +1,5 @@
 #pragma once
 
-#include "vectorkv/distance.h"
 #include "vectorkv/types.h"
 #include <string>
 #include <unordered_map>
