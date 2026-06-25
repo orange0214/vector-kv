@@ -2,6 +2,8 @@
 
 #include "vectorkv/distance.h"
 #include "vectorkv/types.h"
+#include <string>
+#include <unordered_map>
 
 namespace vectorkv {
 
@@ -16,6 +18,11 @@ public:
     // 第二个const用于成员函数：表示该成员函数不会修改当前VectorStore对象的成员变量，
     // 可保证在常量对象（const VectorStore）上调用。
     const VectorRecord* get(const std::string& id) const;
+
+    // 用于外部获得 records_ 进行 brute force
+    const std::unordered_map<std::string, VectorRecord>& records() const {
+        return records_;
+    }
 
     size_t size() const;
 
