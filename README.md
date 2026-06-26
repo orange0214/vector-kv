@@ -1,15 +1,16 @@
 # VectorKV
 
-A C++ in-memory vector database with (planned) HNSW search and WAL recovery.
+A C++ in-memory vector database with WAL crash recovery and (planned) HNSW search.
 
 VectorKV implements the core mechanisms behind embedding-search systems:
 vector storage, top-k similarity search, persistence, and benchmark-driven
 evaluation. See `PRD.md` for the full design and roadmap.
 
-> Status: **in-memory MVP**. Vector storage, cosine similarity, exact
-> brute-force top-k search, and a unified `VectorDB` API are implemented and
-> tested, with a CLI benchmark for QPS/latency. WAL recovery, snapshots, and
-> the HNSW index are upcoming milestones.
+> Status: **in-memory MVP with crash recovery**. Vector storage, cosine
+> similarity, exact brute-force top-k search, and a unified `VectorDB` API are
+> implemented and tested, plus an optional write-ahead log (WAL) that recovers
+> data on restart, and a CLI benchmark for QPS/latency. Snapshots and the HNSW
+> index are upcoming milestones.
 
 ## Features
 
@@ -18,6 +19,8 @@ evaluation. See `PRD.md` for the full design and roadmap.
 - Exact brute-force top-k search (priority-queue based), used as the
   correctness baseline and future Recall@K ground truth
 - String IDs with arbitrary string metadata; dimension validation; soft delete
+- Optional write-ahead log (WAL): operations are logged before mutating memory
+  and replayed on restart, so data survives a process exit (`VectorDB(path)`)
 - CLI benchmark reporting QPS and P50/P95/P99 latency
 - Unit tests (GoogleTest) covering every module
 
@@ -38,6 +41,7 @@ VectorKV/
     distance.h               #   cosine_similarity
     vector_store.h           #   in-memory record storage
     brute_force_index.h      #   exact top-k search
+    wal.h                    #   write-ahead log (append + replay)
     vector_db.h              #   public insert/search/remove API
   src/                       # Core library sources (vectorkv_core)
   tests/                     # Unit tests (GoogleTest)
@@ -88,6 +92,21 @@ for (const auto& r : results) {
 db.remove("doc1");
 ```
 
+To enable crash recovery, construct `VectorDB` with a WAL file path. Every
+`insert`/`remove` is appended to the log before memory is mutated, and the log
+is replayed on construction, so the data is restored after a restart:
+
+```cpp
+{
+    vectorkv::VectorDB db("vectorkv.wal");
+    db.insert("doc1", {1.0f, 0.0f, 0.0f}, {{"title", "cpp notes"}});
+}   // process exits
+
+// later / new process: same path replays the log and restores the data
+vectorkv::VectorDB db("vectorkv.wal");
+auto results = db.search({1.0f, 0.0f, 0.0f}, /*top_k=*/1);  // finds "doc1"
+```
+
 ## Run
 
 ```bash
@@ -131,7 +150,8 @@ compared against for speedup and Recall@K.
 - [x] CMake project, `vectorkv_core` library, GoogleTest setup
 - [x] Cosine similarity, `VectorStore`, brute-force top-k, `VectorDB` API
 - [x] CLI benchmark with QPS and latency percentiles
-- [ ] WAL + snapshot persistence and crash recovery
+- [x] WAL append/replay and crash recovery (`VectorDB(path)`)
+- [ ] Snapshot persistence (faster recovery than full WAL replay)
 - [ ] HNSW approximate nearest neighbor index
 - [ ] Recall@K and HNSW-vs-brute-force comparison
 - [ ] Concurrent search

@@ -28,6 +28,7 @@ add_executable(vectorkv_tests
     brute_force_test.cpp
     vector_db_test.cpp
     wal_test.cpp
+    recovery_test.cpp
 )
 
 target_link_libraries(vectorkv_tests

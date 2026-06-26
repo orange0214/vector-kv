@@ -3,14 +3,20 @@
 #include "vectorkv/types.h"
 #include "vectorkv/vector_store.h"
 #include "vectorkv/brute_force_index.h"
+#include "vectorkv/wal.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include<optional>
 
 namespace vectorkv {
 
 class VectorDB {
 public:
+
+    VectorDB() = default;
+    explicit VectorDB(const std::string& wal_path);
+
     bool insert(
         const std::string& id,
         const std::vector<float>& vector,
@@ -25,8 +31,11 @@ public:
     );
 
 private:
+    void recover();
+
     VectorStore store_;
     BruteForceIndex index_;
+    std::optional<WAL> wal_;
 };
 
 }
