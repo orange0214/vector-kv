@@ -47,3 +47,39 @@ TEST(WAL, AppendDeleteWritesOneLine) {
 
     EXPECT_EQ(readFile(path), "DELETE doc1\n");
 }
+
+TEST(WAL, ReplayReadsBackInsertsAndDeletes) {
+    const std::string path = "wal_replay_test.tmp";
+    std::remove(path.c_str());
+
+    // write
+    {
+        vectorkv::WAL wal(path);
+        vectorkv::VectorRecord rec;
+        rec.id = "doc1";
+        rec.vector = {1.0f, 2.0f, 3.0f};
+        rec.metadata["title"] = "cpp";
+        wal.append_insert(rec);
+        wal.append_delete("doc2");
+    }
+
+    // replay
+    std::vector<vectorkv::VectorRecord> inserts;
+    std::vector<std::string> deletes;
+    {
+        vectorkv::WAL wal(path);
+        wal.replay(
+            [&inserts](const vectorkv::VectorRecord& r){inserts.push_back(r);},
+            [&deletes](const std::string& id){deletes.push_back(id);}
+        );
+    }
+
+    ASSERT_EQ(inserts.size(), 1u);
+    EXPECT_EQ(inserts[0].id, "doc1");
+    ASSERT_EQ(inserts[0].vector.size(), 3u);
+    EXPECT_FLOAT_EQ(inserts[0].vector[0], 1.0f);
+    EXPECT_FLOAT_EQ(inserts[0].vector[2], 3.0f);
+    EXPECT_EQ(inserts[0].metadata.at("title"), "cpp");
+    ASSERT_EQ(deletes.size(), 1u);
+    EXPECT_EQ(deletes[0], "doc2");
+}

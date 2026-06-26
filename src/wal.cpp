@@ -1,6 +1,10 @@
 #include "vectorkv/wal.h"
+#include "vectorkv/types.h"
+#include <cstddef>
+#include <fstream>
 #include <iomanip>
 #include <limits>
+#include <sstream>
 
 namespace vectorkv {
 
@@ -32,6 +36,49 @@ bool WAL::append_delete(const std::string& id) {
     out_ << "DELETE" << " " << id << "\n";
     out_.flush();
     return out_.good();
+}
+
+void WAL::replay(
+    const std::function<void(const VectorRecord&)>& on_insert,
+    const std::function<void(const std::string&)>& on_delete
+) {
+    std::ifstream in(path_);
+    if (!in.is_open()) {
+        return;
+    }
+
+    std::string line;
+    while (std::getline(in, line)) {
+        std::istringstream iss(line);
+        std::string op;
+        iss >> op;
+
+        if (op == "INSERT") {
+            VectorRecord rec;
+            size_t dim = 0;
+            iss >> rec.id >> dim;
+
+            rec.vector.resize(dim);
+            for (size_t i = 0; i < dim; ++i) {
+                iss >> rec.vector[i];
+            }
+
+            // metadata
+            std::string token;
+            while (iss >> token) {
+                auto pos = token.find('=');
+                if (pos != std::string::npos) {
+                    rec.metadata[token.substr(0, pos)] = token.substr(pos + 1);
+                }
+            }
+
+            on_insert(rec);
+        } else if (op == "DELETE") {
+            std::string id;
+            iss >> id;
+            on_delete(id);
+        }
+    }
 }
 
 }
