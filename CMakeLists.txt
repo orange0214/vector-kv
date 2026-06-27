@@ -46,6 +46,7 @@ add_library(vectorkv_core
     src/brute_force_index.cpp
     src/vector_db.cpp
     src/wal.cpp
+    src/snapshot.cpp
 )
 
 target_include_directories(vectorkv_core

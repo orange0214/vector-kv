@@ -29,6 +29,7 @@ add_executable(vectorkv_tests
     vector_db_test.cpp
     wal_test.cpp
     recovery_test.cpp
+    snapshot_test.cpp
 )
 
 target_link_libraries(vectorkv_tests
