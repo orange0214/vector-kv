@@ -161,11 +161,34 @@ The database should recover records after restart.
 Expected behavior:
 
 - Load the latest snapshot if available.
-- Replay WAL entries after the snapshot.
+- Replay WAL entries **after** the snapshot (incremental operations only).
 - Rebuild or restore the vector index.
 - Return the same logical data state as before shutdown.
 
-### 6.5 Benchmark Search Performance
+Without checkpointing, the WAL grows forever and recovery replays the entire log even when a snapshot exists. A **checkpoint** closes that gap: persist full state, then truncate the WAL so only post-checkpoint operations remain in the log.
+
+### 6.5 Checkpoint (Snapshot + WAL Truncation)
+
+A checkpoint captures the current logical database state and resets the WAL baseline.
+
+Expected behavior:
+
+- **Manual checkpoint:** `checkpoint()` (or `save_snapshot` followed by WAL truncate) writes the full state, then **truncates the WAL only after the snapshot is durably on disk**. Order matters: snapshot first, WAL truncate second — reversing risks data loss on crash.
+- **Automatic checkpoint (Step B):** After a configurable number of writes (e.g. every N `insert`/`remove` calls), the database triggers the same checkpoint flow without user intervention. `search` does not count toward N.
+- After checkpoint, recovery is: load snapshot + replay the **short** WAL tail.
+- WAL entries before the checkpoint are redundant (their effect is already in the snapshot) and may be discarded safely.
+
+Example checkpoint flow:
+
+```text
+1. insert/remove ... (WAL append)
+2. checkpoint triggered (manual or automatic)
+3. save_snapshot  →  full state on disk
+4. truncate WAL   →  empty log; new writes append from here
+5. restart        →  load snapshot + replay small WAL
+```
+
+### 6.6 Benchmark Search Performance
 
 The user should be able to run:
 
@@ -225,6 +248,12 @@ public:
     bool save_snapshot(const std::string& path);
 
     bool load_snapshot(const std::string& path);
+
+    // Checkpoint: save full state, then truncate WAL (snapshot must succeed first)
+    bool checkpoint();
+
+    // Automatic checkpoint every N insert/remove ops (0 = disabled)
+    void set_auto_checkpoint_threshold(size_t write_count);
 };
 ```
 
@@ -383,6 +412,7 @@ Responsibilities:
 - Append insert and delete operations before mutating in-memory state.
 - Flush writes to disk.
 - Replay operations during recovery.
+- **Truncate (reset) the log after a successful checkpoint**, so the WAL only holds operations since the last snapshot.
 
 Example WAL format:
 
@@ -398,8 +428,22 @@ The first implementation can use a text format for readability. A later version 
 Responsibilities:
 
 - Persist the current logical state of the database.
-- Reduce recovery time by avoiding full WAL replay.
-- Store vector dimension, records, metadata, and deleted state.
+- Reduce recovery time by avoiding **full** WAL replay (requires WAL truncate at checkpoint — Step A).
+- Store vector dimension, records, metadata; skip soft-deleted records in the snapshot file.
+
+**Checkpoint semantics (Step A — WAL truncate on snapshot):**
+
+When `checkpoint()` or a successful snapshot write completes and a WAL is active:
+
+1. Write the snapshot (full `store_` state) to disk and flush.
+2. Only then truncate the WAL file to empty (or reopen append mode on a fresh file).
+3. Never truncate before the snapshot is durable — a crash between truncate and snapshot would lose data.
+
+**Automatic checkpoint (Step B):**
+
+- `VectorDB` tracks write operations (`insert` / `remove`).
+- When the count since the last checkpoint reaches `auto_checkpoint_threshold` (configurable, default e.g. 1000), invoke the internal checkpoint flow automatically.
+- Alternative trigger (future): WAL file size exceeds a byte limit.
 
 The HNSW index may either be:
 
@@ -582,10 +626,13 @@ Deliverables:
 
 Deliverables:
 
-- WAL append for insert and delete.
-- WAL replay on startup.
-- Snapshot save and load.
-- Recovery tests.
+- [x] WAL append for insert and delete.
+- [x] WAL replay on startup.
+- [x] Snapshot save and load.
+- [x] Recovery tests (WAL-only and snapshot + WAL).
+- [ ] **Checkpoint (Step A):** truncate WAL after successful snapshot.
+- [ ] **Automatic checkpoint (Step B):** trigger checkpoint every N writes.
+- [ ] Checkpoint integration tests (bounded WAL after checkpoint; recovery after auto-checkpoint).
 
 ### Week 4: HNSW-like Index V1
 

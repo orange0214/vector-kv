@@ -6,11 +6,11 @@ VectorKV implements the core mechanisms behind embedding-search systems:
 vector storage, top-k similarity search, persistence, and benchmark-driven
 evaluation. See `PRD.md` for the full design and roadmap.
 
-> Status: **in-memory MVP with crash recovery**. Vector storage, cosine
+> Status: **in-memory MVP with WAL + snapshot recovery**. Vector storage, cosine
 > similarity, exact brute-force top-k search, and a unified `VectorDB` API are
-> implemented and tested, plus an optional write-ahead log (WAL) that recovers
-> data on restart, and a CLI benchmark for QPS/latency. Snapshots and the HNSW
-> index are upcoming milestones.
+> implemented and tested, plus optional WAL replay and snapshot save/load on
+> restart. **Checkpoint (WAL truncate on snapshot) and automatic checkpoint**
+> are documented next steps — see `PRD.md` §6.5. HNSW index is a later milestone.
 
 ## Features
 
@@ -20,7 +20,11 @@ evaluation. See `PRD.md` for the full design and roadmap.
   correctness baseline and future Recall@K ground truth
 - String IDs with arbitrary string metadata; dimension validation; soft delete
 - Optional write-ahead log (WAL): operations are logged before mutating memory
-  and replayed on restart, so data survives a process exit (`VectorDB(path)`)
+  and replayed on restart (`VectorDB(wal_path)`)
+- Optional snapshot save/load for full-state persistence (`save_snapshot` /
+  `load_snapshot`; recovery loads snapshot then replays WAL)
+- **Planned:** checkpoint truncates WAL after a successful snapshot so the log
+  stays bounded; automatic checkpoint every N writes (see Persistence below)
 - CLI benchmark reporting QPS and P50/P95/P99 latency
 - Unit tests (GoogleTest) covering every module
 
@@ -42,6 +46,7 @@ VectorKV/
     vector_store.h           #   in-memory record storage
     brute_force_index.h      #   exact top-k search
     wal.h                    #   write-ahead log (append + replay)
+    snapshot.h               #   full-state save/load
     vector_db.h              #   public insert/search/remove API
   src/                       # Core library sources (vectorkv_core)
   tests/                     # Unit tests (GoogleTest)
@@ -107,6 +112,36 @@ vectorkv::VectorDB db("vectorkv.wal");
 auto results = db.search({1.0f, 0.0f, 0.0f}, /*top_k=*/1);  // finds "doc1"
 ```
 
+### Persistence: snapshot + WAL + checkpoint
+
+With both WAL and snapshot paths, recovery is **snapshot first, then WAL tail**:
+
+```cpp
+vectorkv::VectorDB db("vectorkv.wal", "vectorkv.snapshot");
+db.insert("doc1", {1.0f, 0.0f, 0.0f});
+db.save_snapshot("vectorkv.snapshot");  // manual full-state dump
+```
+
+**Current behavior:** WAL is not truncated after `save_snapshot`, so the log can
+still grow and recovery may replay the entire WAL (correct, but not optimal).
+
+**Planned (Step A — checkpoint):** after a successful snapshot, truncate the
+WAL so only operations *after* the checkpoint remain. Recovery then replays a
+short log instead of full history.
+
+```cpp
+db.checkpoint();  // planned: save_snapshot + truncate WAL (snapshot must finish first)
+```
+
+**Planned (Step B — automatic checkpoint):** trigger checkpoint every N writes
+without manual calls:
+
+```cpp
+db.set_auto_checkpoint_threshold(1000);  // planned: checkpoint after 1000 insert/remove ops
+```
+
+See `PRD.md` §6.5 and Week 3 deliverables for the full design.
+
 ## Run
 
 ```bash
@@ -150,8 +185,10 @@ compared against for speedup and Recall@K.
 - [x] CMake project, `vectorkv_core` library, GoogleTest setup
 - [x] Cosine similarity, `VectorStore`, brute-force top-k, `VectorDB` API
 - [x] CLI benchmark with QPS and latency percentiles
-- [x] WAL append/replay and crash recovery (`VectorDB(path)`)
-- [ ] Snapshot persistence (faster recovery than full WAL replay)
+- [x] WAL append/replay and crash recovery (`VectorDB(wal_path)`)
+- [x] Snapshot save/load and snapshot + WAL recovery tests
+- [ ] Checkpoint: truncate WAL after successful snapshot (Step A)
+- [ ] Automatic checkpoint every N writes (Step B)
 - [ ] HNSW approximate nearest neighbor index
 - [ ] Recall@K and HNSW-vs-brute-force comparison
 - [ ] Concurrent search
