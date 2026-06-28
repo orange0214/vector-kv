@@ -4,6 +4,7 @@
 #include "vectorkv/vector_store.h"
 #include "vectorkv/brute_force_index.h"
 #include "vectorkv/wal.h"
+#include "vectorkv/snapshot.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,7 +16,10 @@ class VectorDB {
 public:
 
     VectorDB() = default;
-    explicit VectorDB(const std::string& wal_path);
+    explicit VectorDB(
+        const std::string& wal_path, 
+        const std::string& snapshot_path = ""
+    );
 
     bool insert(
         const std::string& id,
@@ -30,12 +34,16 @@ public:
         int top_k
     );
 
+    bool save_snapshot(const std::string& path);
+    bool load_snapshot(const std::string& path);
+
 private:
     void recover();
 
     VectorStore store_;
     BruteForceIndex index_;
     std::optional<WAL> wal_;
+    std::string snap_path_;
 };
 
 }

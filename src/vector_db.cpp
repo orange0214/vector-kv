@@ -1,13 +1,22 @@
 #include "vectorkv/vector_db.h"
+#include "vectorkv/snapshot.h"
+#include "vectorkv/types.h"
+#include <string>
 
 namespace vectorkv {
 
-VectorDB::VectorDB(const std::string& wal_path) {
+VectorDB::VectorDB(const std::string& wal_path, const std::string& snapshot_path) {
     wal_.emplace(wal_path);
+    snap_path_ = snapshot_path;
     recover();
 }
 
 void VectorDB::recover() {
+    // snapshot
+    if (!snap_path_.empty()) {
+        SnapShot::load(snap_path_, [this](const VectorRecord& r){store_.put(r);});
+    }
+    // WAL
     if (!wal_) {
         return;
     }
@@ -46,6 +55,16 @@ std::vector<SearchResult> VectorDB::search(
     int top_k
 ) {
     return index_.search(store_, query, top_k);
+}
+
+bool VectorDB::save_snapshot(const std::string& path) {
+    return SnapShot::save(path, store_.records());
+}
+
+bool VectorDB::load_snapshot(const std::string& path) {
+    return SnapShot::load(
+        path, 
+        [this](const VectorRecord& r){store_.put(r);});
 }
 
 }
