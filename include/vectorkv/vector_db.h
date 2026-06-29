@@ -35,7 +35,10 @@ public:
     );
 
     bool save_snapshot(const std::string& path);
+
     bool load_snapshot(const std::string& path);
+
+    bool checkpoint();
 
 private:
     void recover();

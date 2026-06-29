@@ -67,4 +67,17 @@ bool VectorDB::load_snapshot(const std::string& path) {
         [this](const VectorRecord& r){store_.put(r);});
 }
 
+bool VectorDB::checkpoint() {
+    if (!wal_ || snap_path_.empty()) {
+        return false;
+    }
+    if (!SnapShot::save(snap_path_, store_.records())) {
+        return false;
+    }
+    if (!wal_->truncate()) {
+        return false;
+    }
+    return true;
+}
+
 }
