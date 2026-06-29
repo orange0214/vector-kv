@@ -8,9 +8,9 @@ evaluation. See `PRD.md` for the full design and roadmap.
 
 > Status: **in-memory MVP with WAL + snapshot recovery**. Vector storage, cosine
 > similarity, exact brute-force top-k search, and a unified `VectorDB` API are
-> implemented and tested, plus optional WAL replay and snapshot save/load on
-> restart. **Checkpoint (WAL truncate on snapshot) and automatic checkpoint**
-> are documented next steps — see `PRD.md` §6.5. HNSW index is a later milestone.
+> implemented and tested, plus optional WAL replay, snapshot save/load, manual
+> checkpoint, and automatic checkpoint every N writes. HNSW index is the next
+> milestone — see `PRD.md` Week 4.
 
 ## Features
 
@@ -23,8 +23,10 @@ evaluation. See `PRD.md` for the full design and roadmap.
   and replayed on restart (`VectorDB(wal_path)`)
 - Optional snapshot save/load for full-state persistence (`save_snapshot` /
   `load_snapshot`; recovery loads snapshot then replays WAL)
-- **Planned:** checkpoint truncates WAL after a successful snapshot so the log
-  stays bounded; automatic checkpoint every N writes (see Persistence below)
+- Checkpoint: save snapshot then truncate WAL so the log stays bounded
+  (`checkpoint()`; requires WAL + snapshot path)
+- Automatic checkpoint every N `insert`/`remove` writes
+  (`set_auto_checkpoint_threshold`; `0` = disabled)
 - CLI benchmark reporting QPS and P50/P95/P99 latency
 - Unit tests (GoogleTest) covering every module
 
@@ -122,25 +124,23 @@ db.insert("doc1", {1.0f, 0.0f, 0.0f});
 db.save_snapshot("vectorkv.snapshot");  // manual full-state dump
 ```
 
-**Current behavior:** WAL is not truncated after `save_snapshot`, so the log can
-still grow and recovery may replay the entire WAL (correct, but not optimal).
-
-**Planned (Step A — checkpoint):** after a successful snapshot, truncate the
-WAL so only operations *after* the checkpoint remain. Recovery then replays a
-short log instead of full history.
+`save_snapshot` alone does not truncate the WAL; use `checkpoint()` when you want
+to reset the log after persisting full state. Recovery always loads the snapshot
+first, then replays only the WAL tail.
 
 ```cpp
-db.checkpoint();  // planned: save_snapshot + truncate WAL (snapshot must finish first)
+db.checkpoint();  // save snapshot, then truncate WAL (snapshot must finish first)
 ```
 
-**Planned (Step B — automatic checkpoint):** trigger checkpoint every N writes
-without manual calls:
+To checkpoint automatically without manual calls:
 
 ```cpp
-db.set_auto_checkpoint_threshold(1000);  // planned: checkpoint after 1000 insert/remove ops
+db.set_auto_checkpoint_threshold(1000);  // checkpoint after 1000 insert/remove ops
 ```
 
-See `PRD.md` §6.5 and Week 3 deliverables for the full design.
+Both `insert` and `remove` count toward N; `search` does not. Threshold `0`
+(the default) disables automatic checkpoint. See `PRD.md` §6.5 for the full
+design.
 
 ## Run
 
@@ -187,8 +187,8 @@ compared against for speedup and Recall@K.
 - [x] CLI benchmark with QPS and latency percentiles
 - [x] WAL append/replay and crash recovery (`VectorDB(wal_path)`)
 - [x] Snapshot save/load and snapshot + WAL recovery tests
-- [ ] Checkpoint: truncate WAL after successful snapshot (Step A)
-- [ ] Automatic checkpoint every N writes (Step B)
+- [x] Checkpoint: truncate WAL after successful snapshot
+- [x] Automatic checkpoint every N writes
 - [ ] HNSW approximate nearest neighbor index
 - [ ] Recall@K and HNSW-vs-brute-force comparison
 - [ ] Concurrent search
