@@ -4,7 +4,6 @@
 #include "vectorkv/vector_store.h"
 #include "vectorkv/brute_force_index.h"
 #include "vectorkv/wal.h"
-#include "vectorkv/snapshot.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -40,13 +39,19 @@ public:
 
     bool checkpoint();
 
+    void set_auto_checkpoint_threshold(size_t write_count);
+
 private:
     void recover();
+
+    void maybe_checkpoint_after_write();
 
     VectorStore store_;
     BruteForceIndex index_;
     std::optional<WAL> wal_;
     std::string snap_path_;
+    size_t auto_checkpoint_threshold_ = 0;
+    size_t writes_since_checkpoint_ = 0;
 };
 
 }

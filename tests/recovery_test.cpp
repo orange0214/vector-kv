@@ -192,3 +192,84 @@ TEST(Recovery, CheckpointWithoutSnapshotPathFails) {
 
     std::remove(wal_path.c_str());
 }
+
+TEST(Recovery, AutoCheckpointAfterNWrites) {
+    const std::string wal_path = "recovery_auto_cp.wal";
+    const std::string snap_path = "recovery_auto_cp.snapshot";
+    std::remove(wal_path.c_str());
+    std::remove(snap_path.c_str());
+
+    {
+        VectorDB db(wal_path, snap_path);
+        db.set_auto_checkpoint_threshold(2);
+        db.insert("a", {1.0f, 0.0f});
+        db.insert("b", {0.0f, 1.0f});
+        db.insert("c", {0.5f, 0.5f});
+    }
+
+    EXPECT_EQ(readFile(wal_path), "INSERT c 2 0.5 0.5\n");
+
+    {
+        VectorDB db(wal_path, snap_path);
+        EXPECT_EQ(db.search({1.0f, 0.0f}, 10).size(), 3u);
+    }
+
+    std::remove(wal_path.c_str());
+    std::remove(snap_path.c_str());
+}
+
+TEST(Recovery, AutoCheckpointDisabledWhenThresholdZero) {
+    const std::string wal_path = "recovery_auto_cp_off.wal";
+    const std::string snap_path = "recovery_auto_cp_off.snapshot";
+    std::remove(wal_path.c_str());
+    std::remove(snap_path.c_str());
+
+    {
+        VectorDB db(wal_path, snap_path);
+        db.insert("a", {1.0f, 0.0f});
+        db.insert("b", {0.0f, 1.0f});
+        db.insert("c", {0.5f, 0.5f});
+    }
+
+    EXPECT_EQ(
+        readFile(wal_path),
+        "INSERT a 2 1 0\n"
+        "INSERT b 2 0 1\n"
+        "INSERT c 2 0.5 0.5\n"
+    );
+
+    {
+        VectorDB db(wal_path, snap_path);
+        EXPECT_EQ(db.search({1.0f, 0.0f}, 10).size(), 3u);
+    }
+
+    std::remove(wal_path.c_str());
+    std::remove(snap_path.c_str());
+}
+
+TEST(Recovery, AutoCheckpointCountsRemove) {
+    const std::string wal_path = "recovery_auto_cp_remove.wal";
+    const std::string snap_path = "recovery_auto_cp_remove.snapshot";
+    std::remove(wal_path.c_str());
+    std::remove(snap_path.c_str());
+
+    {
+        VectorDB db(wal_path, snap_path);
+        db.set_auto_checkpoint_threshold(2);
+        db.insert("a", {1.0f, 0.0f});  
+        db.remove("a");
+        db.insert("b", {0.0f, 1.0f});
+    }
+
+    EXPECT_EQ(readFile(wal_path), "INSERT b 2 0 1\n");
+
+    {
+        VectorDB db(wal_path, snap_path);
+        auto results = db.search({0.0f, 1.0f}, 10);
+        ASSERT_EQ(results.size(), 1u);
+        EXPECT_EQ(results[0].id, "b");
+    }
+
+    std::remove(wal_path.c_str());
+    std::remove(snap_path.c_str());
+}

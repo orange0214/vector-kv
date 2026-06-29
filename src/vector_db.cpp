@@ -1,6 +1,7 @@
 #include "vectorkv/vector_db.h"
 #include "vectorkv/snapshot.h"
 #include "vectorkv/types.h"
+#include <cstddef>
 #include <string>
 
 namespace vectorkv {
@@ -40,14 +41,22 @@ bool VectorDB::insert(
     if (wal_) {
         wal_->append_insert(record);
     }
-    return store_.put(record);
+    if (!store_.put(record)) {
+        return false;
+    }
+    maybe_checkpoint_after_write();
+    return true;
 }
 
 bool VectorDB::remove(const std::string& id) {
     if (wal_) {
         wal_->append_delete(id);
     }
-    return store_.remove(id);
+    if (!store_.remove(id)) {
+        return false;
+    }
+    maybe_checkpoint_after_write();
+    return true;
 }
 
 std::vector<SearchResult> VectorDB::search(
@@ -77,7 +86,24 @@ bool VectorDB::checkpoint() {
     if (!wal_->truncate()) {
         return false;
     }
+
+    writes_since_checkpoint_ = 0;
+
     return true;
 }
+
+void VectorDB::set_auto_checkpoint_threshold(size_t write_count) {
+    auto_checkpoint_threshold_ = write_count;
+}
+
+void VectorDB::maybe_checkpoint_after_write() {
+    if (!wal_ || snap_path_.empty() || auto_checkpoint_threshold_ == 0) {
+        return;
+    }
+    ++writes_since_checkpoint_;
+    if (writes_since_checkpoint_ >= auto_checkpoint_threshold_) {
+        checkpoint();
+    }
+} 
 
 }
