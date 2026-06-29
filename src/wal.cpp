@@ -38,6 +38,22 @@ bool WAL::append_delete(const std::string& id) {
     return out_.good();
 }
 
+bool WAL::truncate() {
+    out_.close();
+    {
+        std::ofstream clear_file(path_, std::ios::trunc);
+        if (!clear_file.is_open()) {
+            return false;
+        }
+    }
+    out_.open(path_, std::ios::app);
+    if (!out_.is_open()) {
+        return false;
+    }
+    out_ << std::setprecision(std::numeric_limits<float>::max_digits10);
+    return out_.good();
+}
+
 void WAL::replay(
     const std::function<void(const VectorRecord&)>& on_insert,
     const std::function<void(const std::string&)>& on_delete

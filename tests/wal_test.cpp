@@ -83,3 +83,30 @@ TEST(WAL, ReplayReadsBackInsertsAndDeletes) {
     ASSERT_EQ(deletes.size(), 1u);
     EXPECT_EQ(deletes[0], "doc2");
 }
+
+TEST(WAL, TruncateClearsPriorEntries) {
+    const std::string path = "wal_truncate_test.tmp";
+    std::remove(path.c_str());
+
+    {
+        vectorkv::WAL wal(path);
+
+        vectorkv::VectorRecord old_rec;
+        old_rec.id = "old";
+        old_rec.vector = {1.0f, 2.0f};
+        EXPECT_TRUE(wal.append_insert(old_rec));
+        EXPECT_TRUE(wal.append_delete("old"));
+    }
+
+    {
+        vectorkv::WAL wal(path);
+        EXPECT_TRUE(wal.truncate());
+        vectorkv::VectorRecord new_rec;
+        new_rec.id = "new";
+        new_rec.vector = {3.0f, 4.0f};
+        EXPECT_TRUE(wal.append_insert(new_rec));
+    }
+
+    EXPECT_EQ(readFile(path), "INSERT new 2 3 4\n");
+    std::remove(path.c_str());
+}

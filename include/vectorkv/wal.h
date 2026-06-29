@@ -22,6 +22,8 @@ public:
 
     bool append_delete(const std::string& id);
 
+    bool truncate();
+
     void replay(
         const std::function<void(const VectorRecord&)>& on_insert,
         const std::function<void(const std::string&)>& on_delete
